@@ -12,6 +12,7 @@ import org.elasticsearch.inference.WeightedToken;
 import org.elasticsearch.xpack.core.ml.inference.results.MlChunkedTextExpansionResults;
 import org.elasticsearch.xpack.core.ml.inference.results.TextExpansionResults;
 import org.elasticsearch.xpack.core.ml.inference.trainedmodel.NlpConfig;
+import org.elasticsearch.xpack.core.ml.inference.trainedmodel.TextExpansionConfig;
 import org.elasticsearch.xpack.ml.inference.nlp.tokenizers.NlpTokenizer;
 import org.elasticsearch.xpack.ml.inference.nlp.tokenizers.TokenizationResult;
 import org.elasticsearch.xpack.ml.inference.pytorch.results.PyTorchInferenceResult;
@@ -60,7 +61,8 @@ public class TextExpansionProcessor extends NlpTask.Processor {
             pyTorchResult,
             replacementVocab,
             config.getResultsField(),
-            chunkResults
+            chunkResults,
+            ((TextExpansionConfig) config).getExpansionType()
         );
     }
 
@@ -69,8 +71,30 @@ public class TextExpansionProcessor extends NlpTask.Processor {
         PyTorchInferenceResult pyTorchResult,
         Map<Integer, String> replacementVocab,
         String resultsField,
-        boolean chunkResults
+        boolean chunkResults,
+        String expansionType
     ) {
+        // SPLADE type expansion
+        if (TextExpansionConfig.EXPANSION_TYPE_SPLADE.equals(expansionType)) {
+            // chunkResults is not supported for SPLADE models
+            if (chunkResults) {
+                throw new IllegalArgumentException("chunkResults is not supported for SPLADE models");
+            }
+
+            // For SPLADE models, the second dimension of the inference result is for each token in the input.
+            var weightedTokens = new ArrayList<WeightedToken>();
+            for (int i = 0; i < pyTorchResult.getInferenceResult()[0].length; i++) {
+                spladeVectorToTokenWeights(weightedTokens, pyTorchResult.getInferenceResult()[0][i], tokenization, replacementVocab);
+            }
+            weightedTokens.sort((t1, t2) -> Float.compare(t2.weight(), t1.weight()));
+            return new TextExpansionResults(
+                Optional.ofNullable(resultsField).orElse(DEFAULT_RESULTS_FIELD),
+                weightedTokens,
+                tokenization.anyTruncated()
+            );
+        }
+
+        // ELSER type expansion
         if (chunkResults) {
             var chunkedResults = new ArrayList<MlChunkedTextExpansionResults.ChunkedResult>();
 
@@ -107,6 +131,33 @@ public class TextExpansionProcessor extends NlpTask.Processor {
             );
         }
     }
+
+    /**
+     * Converts a SPLADE vector to a list of weighted tokens.
+     * The SPLADE model uses max pooling, so we apply that to the scores.
+     *
+     * @param weightedTokens The list to populate with weighted tokens. Updated in place.
+     * @param vector The SPLADE vector.
+     * @param tokenization The tokenization result containing the vocabulary.
+     * @param replacementVocab A map of token IDs to their replacements, if any.
+     */
+    static void spladeVectorToTokenWeights(
+        List<WeightedToken> weightedTokens,
+        double[] vector,
+        TokenizationResult tokenization,
+        Map<Integer, String> replacementVocab
+    ) {
+        // Anything with a score > 0.0 is retained.
+        for (int i = 0; i < vector.length; i++) {
+            if (vector[i] > 0.0) {
+                double maxPool = NlpHelpers.spladeMaxPooling(vector[i]);
+                if (maxPool > 0.0) {
+                    weightedTokens.add(new WeightedToken(tokenForId(i, tokenization, replacementVocab), (float) maxPool));
+                }
+            }
+        }
+    }
+
 
     static List<WeightedToken> sparseVectorToTokenWeights(
         double[] vector,
