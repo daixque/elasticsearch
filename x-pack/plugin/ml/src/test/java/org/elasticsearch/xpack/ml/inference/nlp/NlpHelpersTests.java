@@ -10,6 +10,8 @@ package org.elasticsearch.xpack.ml.inference.nlp;
 import org.elasticsearch.search.aggregations.pipeline.MovingFunctions;
 import org.elasticsearch.test.ESTestCase;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -117,6 +119,42 @@ public class NlpHelpersTests extends ESTestCase {
         assertEquals(2, scoreAndIndices[1].index);
         assertEquals(0, scoreAndIndices[2].index);
         assertEquals(1, scoreAndIndices[3].index);
+    }
+
+    public void testTopK_List() {
+        var list = new ArrayList<Double>(List.of(1.0, 0.0, 2.0, 8.0, 9.0, 4.2, 4.2, 3.0));
+
+        // Test with k = 3
+        var result_k3 = NlpHelpers.topK(3, list, Comparator.comparingDouble(Double::doubleValue));
+        assertEquals(3, result_k3.size());
+        assertEquals(9.0, result_k3.get(0), 0.001);
+        assertEquals(8.0, result_k3.get(1), 0.001);
+        assertEquals(4.2, result_k3.get(2), 0.001);
+        assertEquals(8, list.size()); // original list should not be modified
+
+        // Test with k = -1 (Non-filtered)
+        var result_kMinus = NlpHelpers.topK(-1, list, Comparator.comparingDouble(Double::doubleValue));
+        assertEquals(8, result_kMinus.size());
+        assertEquals(9.0, result_kMinus.get(0), 0.001);
+        assertEquals(8.0, result_kMinus.get(1), 0.001);
+        assertEquals(4.2, result_kMinus.get(2), 0.001);
+        assertEquals(4.2, result_kMinus.get(3), 0.001);
+        assertEquals(3.0, result_kMinus.get(4), 0.001);
+        assertEquals(2.0, result_kMinus.get(5), 0.001);
+        assertEquals(1.0, result_kMinus.get(6), 0.001);
+        assertEquals(0.0, result_kMinus.get(7), 0.001);
+
+        // Test with k = 8 (k = size of the list, Non-filtered)
+        var result_k8 = NlpHelpers.topK(9, list, Comparator.comparingDouble(Double::doubleValue));
+        assertEquals(8, result_kMinus.size());
+        assertEquals(9.0, result_kMinus.get(0), 0.001);
+        assertEquals(8.0, result_kMinus.get(1), 0.001);
+        assertEquals(4.2, result_kMinus.get(2), 0.001);
+        assertEquals(4.2, result_kMinus.get(3), 0.001);
+        assertEquals(3.0, result_kMinus.get(4), 0.001);
+        assertEquals(2.0, result_kMinus.get(5), 0.001);
+        assertEquals(1.0, result_kMinus.get(6), 0.001);
+        assertEquals(0.0, result_kMinus.get(7), 0.001);
     }
 
     public void testSpladeSaturation() {

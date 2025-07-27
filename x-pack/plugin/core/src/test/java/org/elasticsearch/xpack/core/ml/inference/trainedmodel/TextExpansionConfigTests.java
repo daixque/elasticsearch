@@ -31,20 +31,24 @@ public class TextExpansionConfigTests extends InferenceConfigItemTestCase<TextEx
             randomBoolean() ? null : VocabularyConfigTests.createRandom(),
             randomBoolean() ? null : tokenization,
             randomBoolean() ? null : randomAlphaOfLength(5),
-            randomFrom(TextExpansionConfig.EXPANSION_TYPE_ELSER, TextExpansionConfig.EXPANSION_TYPE_SPLADE)
+            randomFrom(TextExpansionConfig.EXPANSION_TYPE_ELSER, TextExpansionConfig.EXPANSION_TYPE_SPLADE),
+            randomIntBetween(-1, 10) // top_k can be -1 (unset) or a positive integer
         );
     }
 
     public static TextExpansionConfig mutateForVersion(TextExpansionConfig instance, TransportVersion version) {
         String expansionType = instance.getExpansionType();
+        int topK = instance.getTopK();
         if (version.before(TransportVersions.ML_EXPANSION_TYPE)) {
             expansionType = null;
+            topK = TextExpansionConfig.UNSET_TOP_K_VALUE; // top_k is not supported before this version
         }
         return new TextExpansionConfig(
             instance.getVocabularyConfig(),
             InferenceConfigTestScaffolding.mutateTokenizationForVersion(instance.getTokenization(), version),
             instance.getResultsField(),
-            expansionType
+            expansionType,
+            topK
         );
     }
 

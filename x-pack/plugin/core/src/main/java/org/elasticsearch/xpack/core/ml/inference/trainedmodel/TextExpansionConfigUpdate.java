@@ -25,23 +25,26 @@ import java.util.Objects;
 import static org.elasticsearch.xpack.core.ml.inference.trainedmodel.NlpConfig.RESULTS_FIELD;
 import static org.elasticsearch.xpack.core.ml.inference.trainedmodel.NlpConfig.TOKENIZATION;
 import static org.elasticsearch.xpack.core.ml.inference.trainedmodel.TextExpansionConfig.EXPANSION_TYPE;
+import static org.elasticsearch.xpack.core.ml.inference.trainedmodel.TextExpansionConfig.TOP_K;
 
 public class TextExpansionConfigUpdate extends NlpConfigUpdate {
 
     public static final String NAME = TextExpansionConfig.NAME;
 
-    public static final TextExpansionConfigUpdate EMPTY_UPDATE = new TextExpansionConfigUpdate(null, null, null);
+    public static final TextExpansionConfigUpdate EMPTY_UPDATE = new TextExpansionConfigUpdate(null, null, TextExpansionConfig.UNSET_TOP_K_VALUE, null);
 
     public static TextExpansionConfigUpdate fromMap(Map<String, Object> map) {
         Map<String, Object> options = new HashMap<>(map);
         String resultsField = (String) options.remove(RESULTS_FIELD.getPreferredName());
         String expansionTypeField = (String) options.remove(EXPANSION_TYPE.getPreferredName());
+        Integer topKField = (Integer) options.remove(TOP_K.getPreferredName());
+        int topK = topKField == null ? TextExpansionConfig.UNSET_TOP_K_VALUE : topKField;
         TokenizationUpdate tokenizationUpdate = NlpConfigUpdate.tokenizationFromMap(options);
 
         if (options.isEmpty() == false) {
             throw ExceptionsHelper.badRequestException("Unrecognized fields {}.", options.keySet());
         }
-        return new TextExpansionConfigUpdate(resultsField, expansionTypeField, tokenizationUpdate);
+        return new TextExpansionConfigUpdate(resultsField, expansionTypeField, topK, tokenizationUpdate);
     }
 
     private static final ObjectParser<TextExpansionConfigUpdate.Builder, Void> STRICT_PARSER = createParser(false);
@@ -54,6 +57,7 @@ public class TextExpansionConfigUpdate extends NlpConfigUpdate {
         );
         parser.declareString(TextExpansionConfigUpdate.Builder::setResultsField, RESULTS_FIELD);
         parser.declareString(TextExpansionConfigUpdate.Builder::setExpansionType, EXPANSION_TYPE);
+        parser.declareInt(TextExpansionConfigUpdate.Builder::setTopK, TOP_K);
         parser.declareNamedObject(
             TextExpansionConfigUpdate.Builder::setTokenizationUpdate,
             (p, c, n) -> p.namedObject(TokenizationUpdate.class, n, lenient),
@@ -68,17 +72,20 @@ public class TextExpansionConfigUpdate extends NlpConfigUpdate {
 
     private final String resultsField;
     private final String expansionType;
+    private final int topK;
 
-    public TextExpansionConfigUpdate(String resultsField, String expansionType, TokenizationUpdate tokenizationUpdate) {
+    public TextExpansionConfigUpdate(String resultsField, String expansionType, int topK, TokenizationUpdate tokenizationUpdate) {
         super(tokenizationUpdate);
         this.resultsField = resultsField;
         this.expansionType = expansionType;
+        this.topK = topK;
     }
 
     public TextExpansionConfigUpdate(StreamInput in) throws IOException {
         super(in);
         this.resultsField = in.readOptionalString();
         this.expansionType = in.readOptionalString();
+        this.topK = in.readVInt();
     }
 
     @Override
@@ -86,6 +93,7 @@ public class TextExpansionConfigUpdate extends NlpConfigUpdate {
         super.writeTo(out);
         out.writeOptionalString(resultsField);
         out.writeOptionalString(expansionType);
+        out.writeVInt(topK);
     }
 
     @Override
@@ -96,6 +104,7 @@ public class TextExpansionConfigUpdate extends NlpConfigUpdate {
         if (expansionType != null) {
             builder.field(EXPANSION_TYPE.getPreferredName(), expansionType);
         }
+        builder.field(TOP_K.getPreferredName(), topK);
         return builder;
     }
 
@@ -123,6 +132,10 @@ public class TextExpansionConfigUpdate extends NlpConfigUpdate {
         return expansionType;
     }
 
+    public int getTopK() {
+        return topK;
+    }
+
     @Override
     public InferenceConfigUpdate.Builder<? extends InferenceConfigUpdate.Builder<?, ?>, ? extends InferenceConfigUpdate> newBuilder() {
         return new TextExpansionConfigUpdate.Builder().setResultsField(resultsField)
@@ -135,7 +148,9 @@ public class TextExpansionConfigUpdate extends NlpConfigUpdate {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         TextExpansionConfigUpdate that = (TextExpansionConfigUpdate) o;
-        return Objects.equals(resultsField, that.resultsField) && Objects.equals(tokenizationUpdate, that.tokenizationUpdate);
+        return Objects.equals(resultsField, that.resultsField) && Objects.equals(tokenizationUpdate, that.tokenizationUpdate)
+            && Objects.equals(expansionType, that.expansionType)
+            && topK == that.topK;
     }
 
     @Override
@@ -156,6 +171,7 @@ public class TextExpansionConfigUpdate extends NlpConfigUpdate {
     public static class Builder implements InferenceConfigUpdate.Builder<TextExpansionConfigUpdate.Builder, TextExpansionConfigUpdate> {
         private String resultsField;
         private String expansionType;
+        private int topK;
         private TokenizationUpdate tokenizationUpdate;
 
         @Override
@@ -169,6 +185,11 @@ public class TextExpansionConfigUpdate extends NlpConfigUpdate {
             return this;
         }
 
+        public TextExpansionConfigUpdate.Builder setTopK(int topK) {
+            this.topK = topK;
+            return this;
+        }
+
         public TextExpansionConfigUpdate.Builder setTokenizationUpdate(TokenizationUpdate tokenizationUpdate) {
             this.tokenizationUpdate = tokenizationUpdate;
             return this;
@@ -176,7 +197,7 @@ public class TextExpansionConfigUpdate extends NlpConfigUpdate {
 
         @Override
         public TextExpansionConfigUpdate build() {
-            return new TextExpansionConfigUpdate(resultsField, expansionType, tokenizationUpdate);
+            return new TextExpansionConfigUpdate(resultsField, expansionType, topK, tokenizationUpdate);
         }
     }
 
