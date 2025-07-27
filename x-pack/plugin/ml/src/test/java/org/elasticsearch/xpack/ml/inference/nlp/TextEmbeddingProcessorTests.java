@@ -92,7 +92,8 @@ public class TextEmbeddingProcessorTests extends ESTestCase {
                 Map.of(),
                 "foo",
                 true,
-                TextExpansionConfig.EXPANSION_TYPE_ELSER
+                TextExpansionConfig.EXPANSION_TYPE_ELSER,
+                TextExpansionConfig.UNSET_TOP_K_VALUE
             );
             assertThat(inferenceResult, instanceOf(MlChunkedTextExpansionResults.class));
 

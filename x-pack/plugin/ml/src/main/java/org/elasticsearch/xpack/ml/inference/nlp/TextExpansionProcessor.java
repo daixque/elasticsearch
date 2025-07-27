@@ -18,6 +18,7 @@ import org.elasticsearch.xpack.ml.inference.nlp.tokenizers.TokenizationResult;
 import org.elasticsearch.xpack.ml.inference.pytorch.results.PyTorchInferenceResult;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -56,13 +57,15 @@ public class TextExpansionProcessor extends NlpTask.Processor {
 
     @Override
     public NlpTask.ResultProcessor getResultProcessor(NlpConfig config) {
+        TextExpansionConfig textExpansionConfig = ((TextExpansionConfig) config);
         return (tokenization, pyTorchResult, chunkResults) -> processResult(
             tokenization,
             pyTorchResult,
             replacementVocab,
             config.getResultsField(),
             chunkResults,
-            ((TextExpansionConfig) config).getExpansionType()
+            textExpansionConfig.getExpansionType(),
+            textExpansionConfig.getTopK()
         );
     }
 
@@ -72,7 +75,8 @@ public class TextExpansionProcessor extends NlpTask.Processor {
         Map<Integer, String> replacementVocab,
         String resultsField,
         boolean chunkResults,
-        String expansionType
+        String expansionType,
+        int topK
     ) {
         // SPLADE type expansion
         if (TextExpansionConfig.EXPANSION_TYPE_SPLADE.equals(expansionType)) {
@@ -83,7 +87,8 @@ public class TextExpansionProcessor extends NlpTask.Processor {
 
             // For SPLADE models, the second dimension of the inference result is for each token in the input.
             var weightedTokens = spladeVectorToTokenWeights(pyTorchResult.getInferenceResult()[0], tokenization, replacementVocab);
-            weightedTokens.sort((t1, t2) -> Float.compare(t2.weight(), t1.weight()));
+            topK = topK == TextExpansionConfig.UNSET_TOP_K_VALUE ? weightedTokens.size() : topK;
+            weightedTokens = NlpHelpers.topK(topK, weightedTokens, Comparator.comparingDouble(WeightedToken::weight));
             return new TextExpansionResults(
                 Optional.ofNullable(resultsField).orElse(DEFAULT_RESULTS_FIELD),
                 weightedTokens,

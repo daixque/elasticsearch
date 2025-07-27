@@ -9,7 +9,9 @@ package org.elasticsearch.xpack.ml.inference.nlp;
 
 import org.elasticsearch.search.aggregations.pipeline.MovingFunctions;
 
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
 import java.util.PriorityQueue;
 
@@ -105,6 +107,30 @@ public final class NlpHelpers {
             result[i] = minHeap.poll();
         }
         return result;
+    }
+
+    static <T> List<T> topK(int k, List<T> list, Comparator<T> comparator) {
+        if (k < 0 || k > list.size()) {
+            k = list.size();
+        }
+
+        PriorityQueue<T> minHeap = new PriorityQueue<>(k, comparator);
+        // initialise with the first k values
+        for (int i = 0; i < k; i++) {
+            minHeap.add(list.get(i));
+        }
+
+        T minValue = minHeap.peek();
+        for (int i = k; i < list.size(); i++) {
+            if (comparator.compare(list.get(i), minValue) > 0) {
+                minHeap.poll();
+                minHeap.add(list.get(i));
+                minValue = minHeap.peek();
+            }
+        }
+        return minHeap.stream()
+            .sorted(comparator.reversed())
+            .toList();
     }
 
     /**
